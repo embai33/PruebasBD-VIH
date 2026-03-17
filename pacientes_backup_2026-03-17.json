@@ -1,0 +1,56 @@
+[
+  {
+    "nhc": "NHC-001",
+    "nombre": "María García López",
+    "edad": 45,
+    "diagnostico": "VIH",
+    "tratamiento": "Biktarvy",
+    "estado": "activo",
+    "creado": "2026-03-17T17:43:13.819Z"
+  },
+  {
+    "nhc": "NHC-002",
+    "nombre": "Juan Martínez Ruiz",
+    "edad": 62,
+    "diagnostico": "VIH + HTA",
+    "tratamiento": "Dovato + Enalapril",
+    "estado": "activo",
+    "creado": "2026-03-17T17:43:13.819Z"
+  },
+  {
+    "nhc": "NHC-003",
+    "nombre": "Ana Fernández Soler",
+    "edad": 38,
+    "diagnostico": "VIH",
+    "tratamiento": "Triumeq",
+    "estado": "activo",
+    "creado": "2026-03-17T17:43:13.819Z"
+  },
+  {
+    "nhc": "NHC-004",
+    "nombre": "Pedro Navarro Gil",
+    "edad": 55,
+    "diagnostico": "VIH + DM2",
+    "tratamiento": "Symtuza + Metformina",
+    "estado": "inactivo",
+    "creado": "2026-03-17T17:43:13.819Z"
+  },
+  {
+    "nhc": "NHC-005",
+    "nombre": "Laura Sánchez Pla",
+    "edad": 29,
+    "diagnostico": "VIH",
+    "tratamiento": "Delstrigo",
+    "estado": "activo",
+    "creado": "2026-03-17T17:43:13.819Z"
+  },
+  {
+    "nhc": "NHC-010",
+    "nombre": "Pepe Pótamo",
+    "edad": 53,
+    "diagnostico": "VIH+VHC",
+    "tratamiento": "Biktarvi",
+    "estado": "activo",
+    "creado": "2026-03-17T17:44:20.660Z"
+  }
+]
