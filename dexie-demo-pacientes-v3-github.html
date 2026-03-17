@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DexieDB Demo — Gestor de Pacientes</title>
+    <script src="https://unpkg.com/dexie@3.2.7/dist/dexie.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f0f2f5;
+            --surface: #ffffff;
+            --primary: #1a56db;
+            --primary-light: #e8eefb;
+            --primary-dark: #1444b0;
+            --accent: #059669;
+            --accent-light: #d1fae5;
+            --danger: #dc2626;
+            --danger-light: #fee2e2;
+            --warning: #f59e0b;
+            --warning-light: #fef3c7;
+            --github: #24292f;
+            --github-light: #f0f1f3;
+            --text: #1e293b;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+            --shadow-lg: 0 10px 25px rgba(0,0,0,0.1);
+            --radius: 10px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── Header ── */
+        .app-header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: var(--shadow);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .app-header h1 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .app-header h1 .icon {
+            width: 32px; height: 32px;
+            background: var(--primary); border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 16px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .header-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+        /* ── Dirty badge ── */
+        .dirty-badge {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            background: var(--warning-light);
+            color: #92400e;
+            border-radius: 20px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            animation: pulse-badge 2s ease-in-out infinite;
+        }
+        .dirty-badge.visible { display: inline-flex; }
+        .dirty-badge .dot { width: 8px; height: 8px; background: var(--warning); border-radius: 50%; }
+        @keyframes pulse-badge {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* ── Sync status ── */
+        .sync-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.76rem;
+            font-weight: 600;
+        }
+        .sync-status.connected { background: var(--accent-light); color: var(--accent); }
+        .sync-status.disconnected { background: var(--github-light); color: var(--text-secondary); }
+        .sync-status .sync-dot { width: 7px; height: 7px; border-radius: 50%; }
+        .sync-status.connected .sync-dot { background: var(--accent); }
+        .sync-status.disconnected .sync-dot { background: #94a3b8; }
+
+        /* ── Container ── */
+        .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+
+        /* ── GitHub config panel ── */
+        .github-panel {
+            background: var(--surface);
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 20px 24px;
+            margin-bottom: 24px;
+            transition: border-color 0.3s;
+        }
+        .github-panel.configured { border-style: solid; border-color: var(--accent); }
+        .github-panel h2 {
+            font-size: 0.95rem; font-weight: 600; margin-bottom: 12px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .github-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        .github-grid .full-width { grid-column: 1 / -1; }
+        .github-panel .form-group { display: flex; flex-direction: column; gap: 3px; }
+        .github-panel .form-group label { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); }
+        .github-panel .form-group input {
+            padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; outline: none;
+            transition: border-color 0.2s;
+        }
+        .github-panel .form-group input:focus { border-color: var(--primary); }
+        .github-panel .form-group input.token-input { letter-spacing: 1px; }
+        .github-panel .actions-row {
+            display: flex; gap: 8px; margin-top: 14px; align-items: center; flex-wrap: wrap;
+        }
+        .github-panel .help-text {
+            font-size: 0.75rem; color: var(--text-secondary); margin-top: 10px; line-height: 1.5;
+        }
+        .github-panel .help-text code {
+            background: var(--github-light); padding: 1px 5px; border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace; font-size: 0.73rem;
+        }
+
+        /* ── Stats ── */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px; margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--surface); border-radius: var(--radius);
+            padding: 16px 20px; box-shadow: var(--shadow);
+            border-left: 4px solid var(--primary);
+        }
+        .stat-card.accent { border-left-color: var(--accent); }
+        .stat-card.warn { border-left-color: #f59e0b; }
+        .stat-card .label {
+            font-size: 0.75rem; text-transform: uppercase;
+            letter-spacing: 0.05em; color: var(--text-secondary); font-weight: 600;
+        }
+        .stat-card .value {
+            font-size: 1.75rem; font-weight: 700;
+            font-family: 'JetBrains Mono', monospace; margin-top: 4px;
+        }
+
+        /* ── Form ── */
+        .form-panel {
+            background: var(--surface); border-radius: var(--radius);
+            padding: 24px; box-shadow: var(--shadow); margin-bottom: 24px;
+        }
+        .form-panel h2 {
+            font-size: 1rem; font-weight: 600; margin-bottom: 16px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
+        .form-group input, .form-group select {
+            padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+            font-family: inherit; font-size: 0.9rem;
+            transition: border-color 0.2s, box-shadow 0.2s; outline: none;
+        }
+        .form-group input:focus, .form-group select:focus {
+            border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light);
+        }
+        .form-actions { display: flex; gap: 8px; margin-top: 16px; }
+
+        /* ── Buttons ── */
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 9px 18px; border: none; border-radius: 8px;
+            font-family: inherit; font-size: 0.85rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; white-space: nowrap;
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
+        .btn-secondary { background: var(--primary-light); color: var(--primary); }
+        .btn-secondary:hover:not(:disabled) { background: #d6e2f7; }
+        .btn-accent { background: var(--accent-light); color: var(--accent); }
+        .btn-accent:hover:not(:disabled) { background: #a7f3d0; }
+        .btn-danger { background: var(--danger-light); color: var(--danger); }
+        .btn-danger:hover:not(:disabled) { background: #fecaca; }
+        .btn-warning { background: var(--warning-light); color: #92400e; }
+        .btn-warning:hover:not(:disabled) { background: #fde68a; }
+        .btn-github { background: var(--github); color: white; }
+        .btn-github:hover:not(:disabled) { background: #1b1f23; }
+        .btn-outline { background: transparent; color: var(--text-secondary); border: 1.5px solid var(--border); }
+        .btn-outline:hover:not(:disabled) { background: var(--bg); }
+        .btn-sm { padding: 6px 12px; font-size: 0.78rem; }
+
+        /* ── Table ── */
+        .table-panel {
+            background: var(--surface); border-radius: var(--radius);
+            box-shadow: var(--shadow); overflow: hidden; margin-bottom: 24px;
+        }
+        .table-header {
+            padding: 16px 24px; display: flex; align-items: center;
+            justify-content: space-between; border-bottom: 1px solid var(--border);
+        }
+        .table-header h2 { font-size: 1rem; font-weight: 600; }
+        .search-box {
+            padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+            font-family: inherit; font-size: 0.85rem; width: 240px; outline: none;
+        }
+        .search-box:focus { border-color: var(--primary); }
+
+        table { width: 100%; border-collapse: collapse; }
+        thead th {
+            text-align: left; padding: 12px 16px; font-size: 0.75rem;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--text-secondary); font-weight: 600; background: #f8fafc;
+            border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;
+        }
+        thead th:hover { color: var(--primary); }
+        thead th .sort-arrow { font-size: 0.7rem; margin-left: 4px; }
+        tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+        tbody tr:hover { background: #f8fafc; }
+        tbody tr:last-child { border-bottom: none; }
+        tbody td { padding: 12px 16px; font-size: 0.88rem; }
+
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+        .badge-active { background: var(--accent-light); color: var(--accent); }
+        .badge-inactive { background: #f1f5f9; color: var(--text-secondary); }
+        .row-actions { display: flex; gap: 4px; }
+
+        .empty-state { padding: 48px 24px; text-align: center; color: var(--text-secondary); }
+        .empty-state .empty-icon { font-size: 3rem; margin-bottom: 12px; opacity: 0.4; }
+
+        /* ── Toast ── */
+        .toast {
+            position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+            background: #1e293b; color: white; border-radius: 10px;
+            font-size: 0.85rem; font-weight: 500; box-shadow: var(--shadow-lg);
+            transform: translateY(80px); opacity: 0; transition: all 0.3s ease; z-index: 999;
+            max-width: 400px;
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+
+        /* ── Footer ── */
+        footer { text-align: center; padding: 24px; font-size: 0.75rem; color: var(--text-secondary); }
+        footer a { color: var(--primary); text-decoration: none; }
+
+        /* ── Modals ── */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.4); z-index: 200;
+            justify-content: center; align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: var(--surface); border-radius: var(--radius);
+            padding: 24px; max-width: 500px; width: 90%; box-shadow: var(--shadow-lg);
+        }
+        .modal h3 { margin-bottom: 12px; font-size: 1.1rem; }
+        .modal p { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5; }
+        .modal .modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+        .modal .changes-count {
+            display: inline-block; background: var(--warning-light); color: #92400e;
+            padding: 2px 10px; border-radius: 12px; font-weight: 700;
+            font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
+        }
+
+        /* ── Spinner ── */
+        .spinner {
+            display: inline-block; width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
+            border-radius: 50%; animation: spin 0.6s linear infinite;
+        }
+        .spinner.dark { border-color: rgba(0,0,0,0.15); border-top-color: var(--primary); }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 640px) {
+            .container { padding: 16px; }
+            .form-grid, .github-grid { grid-template-columns: 1fr; }
+            .search-box { width: 140px; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="app-header">
+    <h1><span class="icon">🗄️</span> DexieDB Demo</h1>
+    <div class="header-right">
+        <span class="sync-status disconnected" id="syncStatus">
+            <span class="sync-dot"></span>
+            <span id="syncText">Sin conexión GitHub</span>
+        </span>
+        <span class="dirty-badge" id="dirtyBadge">
+            <span class="dot"></span>
+            <span id="dirtyText"></span>
+        </span>
+        <div class="header-actions">
+            <button class="btn btn-github btn-sm" id="btnSyncGH" onclick="pushToGitHub()" disabled title="Configurar GitHub primero">
+                ⬆ Guardar en GitHub
+            </button>
+            <button class="btn btn-accent btn-sm" onclick="exportLocal()">⬇ JSON local</button>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('importFile').click()">⬆ Importar</button>
+            <input type="file" id="importFile" accept=".json" style="display:none" onchange="importDB(event)">
+            <button class="btn btn-danger btn-sm" onclick="confirmClearDB()">🗑</button>
+        </div>
+    </div>
+</header>
+
+<div class="container">
+
+    <!-- GitHub Config -->
+    <details class="github-panel" id="githubPanel">
+        <summary style="cursor:pointer; font-weight:600; font-size:0.95rem; list-style:none; display:flex; align-items:center; gap:8px;">
+            ⚙️ Configuración GitHub
+            <span style="font-size:0.75rem; color:var(--text-secondary); font-weight:400;" id="ghConfigHint">
+                — pulsa para configurar
+            </span>
+        </summary>
+        <div style="margin-top: 16px;">
+            <div class="github-grid">
+                <div class="form-group">
+                    <label>Usuario GitHub</label>
+                    <input type="text" id="ghUser" placeholder="ej: embai33">
+                </div>
+                <div class="form-group">
+                    <label>Repositorio</label>
+                    <input type="text" id="ghRepo" placeholder="ej: mi-app-pacientes">
+                </div>
+                <div class="form-group">
+                    <label>Ruta del archivo JSON en el repo</label>
+                    <input type="text" id="ghPath" placeholder="ej: data/pacientes.json" value="data/pacientes.json">
+                </div>
+                <div class="form-group">
+                    <label>Branch</label>
+                    <input type="text" id="ghBranch" placeholder="main" value="main">
+                </div>
+                <div class="form-group full-width">
+                    <label>Personal Access Token (fine-grained, con permisos Contents: read & write)</label>
+                    <input type="password" id="ghToken" placeholder="github_pat_..." class="token-input">
+                </div>
+            </div>
+            <div class="actions-row">
+                <button class="btn btn-github btn-sm" onclick="saveGitHubConfig()">💾 Guardar configuración</button>
+                <button class="btn btn-outline btn-sm" onclick="testGitHubConnection()">🔗 Probar conexión</button>
+                <button class="btn btn-danger btn-sm" onclick="clearGitHubConfig()">🗑 Borrar config</button>
+            </div>
+            <div class="help-text">
+                <strong>Cómo obtener el token:</strong> GitHub → Settings → Developer settings → 
+                Personal access tokens → Fine-grained tokens → Generate new token.<br>
+                Permisos necesarios: <code>Contents: Read and write</code> sobre el repositorio seleccionado.<br>
+                El token se guarda en <code>localStorage</code> de este navegador (nunca se envía a terceros).
+            </div>
+        </div>
+    </details>
+
+    <!-- Stats -->
+    <div class="stats-bar">
+        <div class="stat-card">
+            <div class="label">Total pacientes</div>
+            <div class="value" id="statTotal">0</div>
+        </div>
+        <div class="stat-card accent">
+            <div class="label">Activos</div>
+            <div class="value" id="statActive">0</div>
+        </div>
+        <div class="stat-card warn">
+            <div class="label">Edad media</div>
+            <div class="value" id="statAvgAge">—</div>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <div class="form-panel">
+        <h2 id="formTitle">➕ Añadir paciente</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>NHC</label>
+                <input type="text" id="fNhc" placeholder="Nº Historia Clínica">
+            </div>
+            <div class="form-group">
+                <label>Nombre</label>
+                <input type="text" id="fNombre" placeholder="Nombre completo">
+            </div>
+            <div class="form-group">
+                <label>Edad</label>
+                <input type="number" id="fEdad" placeholder="Años" min="0" max="120">
+            </div>
+            <div class="form-group">
+                <label>Diagnóstico</label>
+                <input type="text" id="fDiag" placeholder="Diagnóstico principal">
+            </div>
+            <div class="form-group">
+                <label>Tratamiento</label>
+                <input type="text" id="fTrat" placeholder="Tratamiento actual">
+            </div>
+            <div class="form-group">
+                <label>Estado</label>
+                <select id="fEstado">
+                    <option value="activo">Activo</option>
+                    <option value="inactivo">Inactivo</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-primary" onclick="savePatient()">💾 Guardar</button>
+            <button class="btn btn-outline" id="btnCancel" onclick="cancelEdit()" style="display:none">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-panel">
+        <div class="table-header">
+            <h2>📋 Registros</h2>
+            <input type="text" class="search-box" placeholder="Buscar..." id="searchInput" oninput="renderTable()">
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th onclick="sortBy('nhc')">NHC <span class="sort-arrow" id="sort-nhc"></span></th>
+                    <th onclick="sortBy('nombre')">Nombre <span class="sort-arrow" id="sort-nombre"></span></th>
+                    <th onclick="sortBy('edad')">Edad <span class="sort-arrow" id="sort-edad"></span></th>
+                    <th onclick="sortBy('diagnostico')">Diagnóstico</th>
+                    <th onclick="sortBy('tratamiento')">Tratamiento</th>
+                    <th onclick="sortBy('estado')">Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+        <div class="empty-state" id="emptyState" style="display:none">
+            <div class="empty-icon">📂</div>
+            <p>No hay registros. Añade el primer paciente o carga desde GitHub.</p>
+        </div>
+    </div>
+
+</div>
+
+<!-- Generic modal -->
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+        <h3 id="modalTitle">Confirmar</h3>
+        <p id="modalMsg"></p>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+            <button class="btn btn-danger" id="modalConfirm">Confirmar</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+    Base de datos local con <strong>Dexie.js</strong> + sincronización <strong>GitHub API</strong><br>
+    Prototipo EMB · <a href="https://www.linkedin.com/in/emilio-monte-boquet" target="_blank">LinkedIn</a>
+</footer>
+
+<script>
+// ═══════════════════════════════════════
+// DATABASE
+// ═══════════════════════════════════════
+const db = new Dexie('PacientesDB');
+db.version(1).stores({
+    pacientes: '++id, nhc, nombre, edad, diagnostico, tratamiento, estado, creado'
+});
+
+let editingId = null;
+let currentSort = { field: 'nombre', asc: true };
+
+// ═══════════════════════════════════════
+// CHANGE TRACKING
+// ═══════════════════════════════════════
+let changeCount = 0;
+let isDirty = false;
+
+function markDirty() {
+    changeCount++;
+    isDirty = true;
+    updateDirtyUI();
+}
+
+function markClean() {
+    changeCount = 0;
+    isDirty = false;
+    updateDirtyUI();
+}
+
+function updateDirtyUI() {
+    const badge = document.getElementById('dirtyBadge');
+    const text = document.getElementById('dirtyText');
+    if (isDirty) {
+        badge.classList.add('visible');
+        text.textContent = `${changeCount} cambio${changeCount !== 1 ? 's' : ''} sin sincronizar`;
+        document.title = `● DexieDB — ${changeCount} cambio${changeCount !== 1 ? 's' : ''}`;
+    } else {
+        badge.classList.remove('visible');
+        document.title = 'DexieDB Demo — Gestor de Pacientes';
+    }
+}
+
+window.addEventListener('beforeunload', (e) => {
+    if (isDirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// ═══════════════════════════════════════
+// GITHUB API CONFIGURATION
+// ═══════════════════════════════════════
+const GH_CONFIG_KEY = 'dexieDemo_ghConfig';
+
+function getGHConfig() {
+    try { return JSON.parse(localStorage.getItem(GH_CONFIG_KEY)) || null; }
+    catch { return null; }
+}
+
+function saveGitHubConfig() {
+    const config = {
+        user: document.getElementById('ghUser').value.trim(),
+        repo: document.getElementById('ghRepo').value.trim(),
+        path: document.getElementById('ghPath').value.trim() || 'data/pacientes.json',
+        branch: document.getElementById('ghBranch').value.trim() || 'main',
+        token: document.getElementById('ghToken').value.trim(),
+    };
+
+    if (!config.user || !config.repo || !config.token) {
+        toast('⚠️ Usuario, repositorio y token son obligatorios');
+        return;
+    }
+
+    localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(config));
+    updateSyncStatus();
+    toast('✅ Configuración GitHub guardada');
+
+    // Close the details panel
+    document.getElementById('githubPanel').removeAttribute('open');
+}
+
+function clearGitHubConfig() {
+    localStorage.removeItem(GH_CONFIG_KEY);
+    ['ghUser','ghRepo','ghPath','ghBranch','ghToken'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('ghPath').value = 'data/pacientes.json';
+    document.getElementById('ghBranch').value = 'main';
+    updateSyncStatus();
+    toast('🗑️ Configuración GitHub eliminada');
+}
+
+function loadGHConfigToForm() {
+    const cfg = getGHConfig();
+    if (cfg) {
+        document.getElementById('ghUser').value = cfg.user || '';
+        document.getElementById('ghRepo').value = cfg.repo || '';
+        document.getElementById('ghPath').value = cfg.path || 'data/pacientes.json';
+        document.getElementById('ghBranch').value = cfg.branch || 'main';
+        document.getElementById('ghToken').value = cfg.token || '';
+    }
+}
+
+function updateSyncStatus() {
+    const cfg = getGHConfig();
+    const status = document.getElementById('syncStatus');
+    const text = document.getElementById('syncText');
+    const btn = document.getElementById('btnSyncGH');
+    const hint = document.getElementById('ghConfigHint');
+    const panel = document.getElementById('githubPanel');
+
+    if (cfg && cfg.token) {
+        status.className = 'sync-status connected';
+        text.textContent = `${cfg.user}/${cfg.repo}`;
+        btn.disabled = false;
+        hint.textContent = '— conectado ✓';
+        panel.classList.add('configured');
+    } else {
+        status.className = 'sync-status disconnected';
+        text.textContent = 'Sin conexión GitHub';
+        btn.disabled = true;
+        hint.textContent = '— pulsa para configurar';
+        panel.classList.remove('configured');
+    }
+}
+
+// ═══════════════════════════════════════
+// GITHUB API — READ / WRITE
+// ═══════════════════════════════════════
+function ghHeaders(cfg) {
+    return {
+        'Authorization': `Bearer ${cfg.token}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+    };
+}
+
+function ghFileURL(cfg) {
+    return `https://api.github.com/repos/${cfg.user}/${cfg.repo}/contents/${cfg.path}?ref=${cfg.branch}`;
+}
+
+async function testGitHubConnection() {
+    const cfg = getGHConfig();
+    if (!cfg) { toast('⚠️ Guarda la configuración primero'); return; }
+
+    try {
+        const resp = await fetch(`https://api.github.com/repos/${cfg.user}/${cfg.repo}`, {
+            headers: ghHeaders(cfg)
+        });
+
+        if (resp.ok) {
+            const repo = await resp.json();
+            toast(`✅ Conectado a ${repo.full_name} (${repo.private ? 'privado' : 'público'})`);
+        } else if (resp.status === 401) {
+            toast('❌ Token inválido o expirado');
+        } else if (resp.status === 404) {
+            toast('❌ Repositorio no encontrado — revisa usuario/repo');
+        } else {
+            toast(`❌ Error HTTP ${resp.status}`);
+        }
+    } catch (err) {
+        toast('❌ Error de conexión: ' + err.message);
+    }
+}
+
+async function pullFromGitHub() {
+    const cfg = getGHConfig();
+    if (!cfg) return false;
+
+    try {
+        const resp = await fetch(ghFileURL(cfg), { headers: ghHeaders(cfg) });
+
+        if (resp.status === 404) {
+            console.log('[GitHub] Archivo no encontrado en el repo — se empezará en vacío.');
+            return false;
+        }
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+        const fileData = await resp.json();
+        const content = atob(fileData.content.replace(/\n/g, ''));
+        const patients = JSON.parse(content);
+
+        if (!Array.isArray(patients)) throw new Error('El JSON del repo no es un array');
+
+        // Clear current DB and load from GitHub
+        await db.pacientes.clear();
+        if (patients.length > 0) {
+            await db.pacientes.bulkAdd(patients.map(p => ({
+                ...p,
+                creado: p.creado || new Date().toISOString()
+            })));
+        }
+
+        // Store the SHA for later updates
+        localStorage.setItem('dexieDemo_ghSHA', fileData.sha);
+
+        console.log(`[GitHub] Cargados ${patients.length} registros desde ${cfg.path}`);
+        toast(`📥 ${patients.length} registros cargados desde GitHub`);
+        markClean();
+        return true;
+    } catch (err) {
+        console.error('[GitHub] Error al leer:', err);
+        toast('⚠️ No se pudo cargar desde GitHub: ' + err.message);
+        return false;
+    }
+}
+
+async function pushToGitHub() {
+    const cfg = getGHConfig();
+    if (!cfg) { toast('⚠️ Configura GitHub primero'); return; }
+
+    const btn = document.getElementById('btnSyncGH');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner"></span> Subiendo...';
+    btn.disabled = true;
+
+    try {
+        // Get all patients (without internal Dexie id)
+        const data = await db.pacientes.toArray();
+        const clean = data.map(({ id, ...rest }) => rest);
+        const jsonContent = JSON.stringify(clean, null, 2);
+        const base64Content = btoa(unescape(encodeURIComponent(jsonContent)));
+
+        // Get current SHA if file exists
+        let sha = localStorage.getItem('dexieDemo_ghSHA') || null;
+
+        // Try to get fresh SHA
+        try {
+            const checkResp = await fetch(ghFileURL(cfg), { headers: ghHeaders(cfg) });
+            if (checkResp.ok) {
+                const checkData = await checkResp.json();
+                sha = checkData.sha;
+            }
+        } catch (e) { /* file may not exist yet */ }
+
+        // PUT the file
+        const body = {
+            message: `Actualizar ${cfg.path} — ${clean.length} registros (${new Date().toLocaleString('es-ES')})`,
+            content: base64Content,
+            branch: cfg.branch,
+        };
+        if (sha) body.sha = sha;
+
+        const resp = await fetch(
+            `https://api.github.com/repos/${cfg.user}/${cfg.repo}/contents/${cfg.path}`,
+            {
+                method: 'PUT',
+                headers: { ...ghHeaders(cfg), 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            }
+        );
+
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.message || `HTTP ${resp.status}`);
+        }
+
+        const result = await resp.json();
+        localStorage.setItem('dexieDemo_ghSHA', result.content.sha);
+
+        markClean();
+        toast(`✅ Subido a GitHub — ${clean.length} registros sincronizados`);
+    } catch (err) {
+        console.error('[GitHub] Error al subir:', err);
+        toast('❌ Error al subir: ' + err.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+// ═══════════════════════════════════════
+// CRUD
+// ═══════════════════════════════════════
+async function savePatient() {
+    const data = {
+        nhc: document.getElementById('fNhc').value.trim(),
+        nombre: document.getElementById('fNombre').value.trim(),
+        edad: parseInt(document.getElementById('fEdad').value) || 0,
+        diagnostico: document.getElementById('fDiag').value.trim(),
+        tratamiento: document.getElementById('fTrat').value.trim(),
+        estado: document.getElementById('fEstado').value,
+    };
+
+    if (!data.nhc || !data.nombre) {
+        toast('⚠️ NHC y Nombre son obligatorios');
+        return;
+    }
+
+    try {
+        if (editingId) {
+            await db.pacientes.update(editingId, data);
+            toast('✅ Paciente actualizado');
+            cancelEdit();
+        } else {
+            data.creado = new Date().toISOString();
+            await db.pacientes.add(data);
+            toast('✅ Paciente añadido');
+        }
+        markDirty();
+        clearForm();
+        renderTable();
+        updateStats();
+    } catch (err) {
+        toast('❌ Error: ' + err.message);
+    }
+}
+
+function editPatient(id) {
+    db.pacientes.get(id).then(p => {
+        if (!p) return;
+        editingId = id;
+        document.getElementById('fNhc').value = p.nhc;
+        document.getElementById('fNombre').value = p.nombre;
+        document.getElementById('fEdad').value = p.edad;
+        document.getElementById('fDiag').value = p.diagnostico;
+        document.getElementById('fTrat').value = p.tratamiento;
+        document.getElementById('fEstado').value = p.estado;
+        document.getElementById('formTitle').textContent = '✏️ Editando paciente #' + p.nhc;
+        document.getElementById('btnCancel').style.display = 'inline-flex';
+        document.getElementById('fNhc').focus();
+    });
+}
+
+function cancelEdit() {
+    editingId = null;
+    document.getElementById('formTitle').textContent = '➕ Añadir paciente';
+    document.getElementById('btnCancel').style.display = 'none';
+    clearForm();
+}
+
+function deletePatient(id) {
+    showModal('Eliminar paciente', '¿Seguro que quieres eliminar este registro?', async () => {
+        await db.pacientes.delete(id);
+        markDirty();
+        toast('🗑️ Paciente eliminado');
+        renderTable();
+        updateStats();
+    });
+}
+
+function clearForm() {
+    ['fNhc','fNombre','fEdad','fDiag','fTrat'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('fEstado').value = 'activo';
+}
+
+// ═══════════════════════════════════════
+// TABLE
+// ═══════════════════════════════════════
+async function renderTable() {
+    const search = document.getElementById('searchInput').value.toLowerCase();
+    let patients = await db.pacientes.toArray();
+
+    if (search) {
+        patients = patients.filter(p =>
+            Object.values(p).some(v => String(v).toLowerCase().includes(search))
+        );
+    }
+
+    patients.sort((a, b) => {
+        let va = a[currentSort.field] ?? '';
+        let vb = b[currentSort.field] ?? '';
+        if (typeof va === 'string') va = va.toLowerCase();
+        if (typeof vb === 'string') vb = vb.toLowerCase();
+        if (va < vb) return currentSort.asc ? -1 : 1;
+        if (va > vb) return currentSort.asc ? 1 : -1;
+        return 0;
+    });
+
+    document.querySelectorAll('.sort-arrow').forEach(el => el.textContent = '');
+    const arrow = document.getElementById('sort-' + currentSort.field);
+    if (arrow) arrow.textContent = currentSort.asc ? '▲' : '▼';
+
+    const tbody = document.getElementById('tableBody');
+    const empty = document.getElementById('emptyState');
+
+    if (patients.length === 0) {
+        tbody.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+    }
+
+    empty.style.display = 'none';
+    tbody.innerHTML = patients.map(p => `
+        <tr>
+            <td><strong>${esc(p.nhc)}</strong></td>
+            <td>${esc(p.nombre)}</td>
+            <td style="font-family:'JetBrains Mono',monospace">${p.edad}</td>
+            <td>${esc(p.diagnostico)}</td>
+            <td>${esc(p.tratamiento)}</td>
+            <td><span class="badge ${p.estado === 'activo' ? 'badge-active' : 'badge-inactive'}">${p.estado}</span></td>
+            <td>
+                <div class="row-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="editPatient(${p.id})">✏️</button>
+                    <button class="btn btn-danger btn-sm" onclick="deletePatient(${p.id})">🗑️</button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function sortBy(field) {
+    if (currentSort.field === field) currentSort.asc = !currentSort.asc;
+    else currentSort = { field, asc: true };
+    renderTable();
+}
+
+// ═══════════════════════════════════════
+// STATS
+// ═══════════════════════════════════════
+async function updateStats() {
+    const all = await db.pacientes.toArray();
+    const active = all.filter(p => p.estado === 'activo');
+    const avgAge = all.length ? (all.reduce((s, p) => s + p.edad, 0) / all.length).toFixed(1) : '—';
+    document.getElementById('statTotal').textContent = all.length;
+    document.getElementById('statActive').textContent = active.length;
+    document.getElementById('statAvgAge').textContent = avgAge;
+}
+
+// ═══════════════════════════════════════
+// LOCAL EXPORT / IMPORT (fallback)
+// ═══════════════════════════════════════
+async function exportLocal() {
+    const data = await db.pacientes.toArray();
+    const clean = data.map(({ id, ...rest }) => rest);
+    const blob = new Blob([JSON.stringify(clean, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'pacientes_backup_' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('⬇️ JSON descargado localmente');
+}
+
+async function importDB(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!Array.isArray(data)) throw new Error('El JSON debe ser un array');
+
+        showModal('Importar datos',
+            `Se importarán ${data.length} registros. Los NHC existentes se actualizarán.`,
+            async () => {
+                let added = 0, updated = 0;
+                for (const item of data) {
+                    const existing = await db.pacientes.where('nhc').equals(item.nhc).first();
+                    if (existing) { await db.pacientes.update(existing.id, item); updated++; }
+                    else { await db.pacientes.add(item); added++; }
+                }
+                markDirty();
+                toast(`✅ Importados: ${added} nuevos, ${updated} actualizados`);
+                renderTable();
+                updateStats();
+            }
+        );
+    } catch (err) {
+        toast('❌ Error: ' + err.message);
+    }
+    event.target.value = '';
+}
+
+function confirmClearDB() {
+    showModal('Vaciar base de datos', '¿Eliminar TODOS los registros? No se puede deshacer.', async () => {
+        await db.pacientes.clear();
+        markDirty();
+        toast('🗑️ Base de datos vaciada');
+        renderTable();
+        updateStats();
+    });
+}
+
+// ═══════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════
+function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function showModal(title, msg, onConfirm) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalMsg').textContent = msg;
+    document.getElementById('modalOverlay').classList.add('active');
+    document.getElementById('modalConfirm').onclick = () => { closeModal(); onConfirm(); };
+}
+
+function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
+
+function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str || '';
+    return d.innerHTML;
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+async function init() {
+    loadGHConfigToForm();
+    updateSyncStatus();
+
+    const cfg = getGHConfig();
+    const count = await db.pacientes.count();
+
+    // If GitHub is configured, always try to pull fresh data
+    if (cfg && cfg.token) {
+        const pulled = await pullFromGitHub();
+        if (!pulled && count === 0) {
+            // GitHub failed and DB is empty — seed demo data
+            await seedDemoData();
+        }
+    } else if (count === 0) {
+        // No GitHub config, empty DB — seed demo data
+        await seedDemoData();
+    }
+
+    renderTable();
+    updateStats();
+}
+
+async function seedDemoData() {
+    await db.pacientes.bulkAdd([
+        { nhc: 'NHC-001', nombre: 'María García López', edad: 45, diagnostico: 'VIH', tratamiento: 'Biktarvy', estado: 'activo', creado: new Date().toISOString() },
+        { nhc: 'NHC-002', nombre: 'Juan Martínez Ruiz', edad: 62, diagnostico: 'VIH + HTA', tratamiento: 'Dovato + Enalapril', estado: 'activo', creado: new Date().toISOString() },
+        { nhc: 'NHC-003', nombre: 'Ana Fernández Soler', edad: 38, diagnostico: 'VIH', tratamiento: 'Triumeq', estado: 'activo', creado: new Date().toISOString() },
+        { nhc: 'NHC-004', nombre: 'Pedro Navarro Gil', edad: 55, diagnostico: 'VIH + DM2', tratamiento: 'Symtuza + Metformina', estado: 'inactivo', creado: new Date().toISOString() },
+        { nhc: 'NHC-005', nombre: 'Laura Sánchez Pla', edad: 29, diagnostico: 'VIH', tratamiento: 'Delstrigo', estado: 'activo', creado: new Date().toISOString() },
+    ]);
+    toast('📋 Datos de ejemplo cargados');
+}
+
+init();
+</script>
+
+</body>
+</html>
